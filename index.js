@@ -2,15 +2,17 @@ const express=require('express');
 const app=express();
 const cors=require('cors');
 require('dotenv').config()
+const ObjectId=require('mongodb').ObjectId;
 const { MongoClient } = require('mongodb');
 const admin = require("firebase-admin");
-
-
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const port=process.env.PORT || 5000;
 
 
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -46,7 +48,10 @@ async function run() {
         await client.connect();
         const database = client.db('doctors_portal');
         const appointmentsCollection = database.collection('appointments');
+
         const usersCollection = database.collection('users');
+
+        console.log('connect to db');
 
         app.get('/appointments',verifyToken, async (req, res) => {
             const email = req.query.email;
@@ -57,7 +62,15 @@ async function run() {
             const cursor = appointmentsCollection.find(query);
             const appointments = await cursor.toArray();
             res.json(appointments);
-        })
+        });
+
+        app.get('/appointments/:id',async(req,res)=>{
+            const id=req.params.id;
+            const query={_id:ObjectId(id)};
+            const result=await appointmentsCollection.findOne(query);
+            res.send(result);
+
+        });
 
         app.post('/appointments', async (req, res) => {
             const appointment = req.body;
@@ -125,7 +138,39 @@ async function run() {
                 isAdmin=true;
             }
             res.send({admin: isAdmin});
+        });
+
+        
+        app.post('/create-payment-intent', async (req, res) => {
+            const paymentInfo = req.body;
+            const amount = paymentInfo.price * 100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                currency: 'usd',
+                amount: amount,
+                payment_method_types: ['card']
+            });
+            console.log(paymentIntent);
+            res.json({ clientSecret: paymentIntent.client_secret });
+        
         })
+
+        // app.post('/create-payment-intent',async(req,res)=>{
+        //     const paymentInfo=req.body;
+        //     console.log(paymentInfo);
+        //     const amount=paymentInfo.price*100;
+        //     const paymentIntent = await stripe.paymentIntents.create({
+
+        //         amount:amount,
+        //         currency:'usd',
+        //         payment_method_types:['card']
+
+        //     });
+        //     res.send({
+        //            clientSecret: paymentIntent.client_secret,
+        //      });
+
+
+        // });
 
 
 
